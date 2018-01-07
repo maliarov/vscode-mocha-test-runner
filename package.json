@@ -15,14 +15,30 @@
     ],
     "main": "./out/extension",
     "contributes": {
+        "configuration": {
+            "type": "object",
+            "title": "Mocha configuration",
+            "properties": {
+                "mocha.path": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Alternative path to mocha script"
+                },
+                "mocha.optsPath": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Alternative path to mocha.opts file"
+                }
+            }
+        },
         "views": {
-			"explorer": [
-				{
-					"id": "testRunner",
-					"name": "Tests"
-				}
-			]
-		},
+            "explorer": [
+                {
+                    "id": "testRunner",
+                    "name": "Tests"
+                }
+            ]
+        },
         "commands": [
             {
                 "command": "extension.buildTestsTree",
