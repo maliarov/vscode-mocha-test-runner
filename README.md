@@ -1,3 +1,3 @@
-# mocha-test-runner README
+# mocha-test-runner
 
 This is mocha tests runner extention

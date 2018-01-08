@@ -1,37 +1,31 @@
 'use strict';
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
+
 import * as vscode from 'vscode';
-
 import MochaTestRunner from './testRunner';
+import MochaTestTreeDataProvider from './testTree';
+import MochaTestDocumentContentProvider from './testDocument';
 
-// this method is called when your extension is activated
-// your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+    const mochaTestContentPreviewProvider: MochaTestDocumentContentProvider = new MochaTestDocumentContentProvider(context);
+    const mochaTestTreeDataProvider: MochaTestTreeDataProvider = new MochaTestTreeDataProvider(context);
+    const mochaTestRunner = new MochaTestRunner(context, mochaTestTreeDataProvider);
 
-    // Use the console to output diagnostic information (console.log) and errors (console.error)
-    // This line of code will only be executed once when your extension is activated
-    console.log('Congratulations, your extension "mocha-test-runner" is now active!');
+    vscode.window.registerTreeDataProvider('testRunner', mochaTestTreeDataProvider);
+    vscode.workspace.registerTextDocumentContentProvider('mocha-test-result', mochaTestContentPreviewProvider);
 
-    const mochaTestRunner = new MochaTestRunner(context);
-
-    vscode.window.registerTreeDataProvider('testRunner', mochaTestRunner);
-
-
-    // The command has been defined in the package.json file
-    // Now provide the implementation of the command with  registerCommand
-    // The commandId parameter must match the command field in package.json
-    const disposable = vscode.commands.registerCommand('extension.buildTestsTree', async () => {
-        // The code you place here will be executed every time your command is executed
-        // Display a message box to the user
-        await mochaTestRunner.buildTestsTree();
-
-        vscode.window.showInformationMessage('Tests Tree Builded');
-    });
-
-    context.subscriptions.push(disposable);
+    context.subscriptions.push(vscode.commands.registerCommand('extension.runAllTests', async () => {
+        vscode.window.showInformationMessage('Running all tests');
+        await mochaTestRunner.run();
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('extension.runAllTestsInFile', async () => {
+        vscode.window.showInformationMessage(`Running all tests in ${vscode.window.activeTextEditor.document.fileName}`);
+        await mochaTestRunner.run(vscode.window.activeTextEditor.document.fileName);
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('extension.showTestPreview', (id: string) => {
+        return vscode.commands.executeCommand('vscode.previewHtml', vscode.Uri.parse(`mocha-test-result://view?${id}`), vscode.ViewColumn.Two, 'Test Results Preview')
+            .then((success) => {}, (reason) => vscode.window.showErrorMessage(reason));
+    }));
 }
 
-// this method is called when your extension is deactivated
 export function deactivate() {
 }

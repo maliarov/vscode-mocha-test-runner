@@ -11,7 +11,8 @@
         "Other"
     ],
     "activationEvents": [
-        "onCommand:extension.buildTestsTree"
+        "onCommand:extension.runAllTests",
+        "onCommand:extension.runAllTestsInFile"
     ],
     "main": "./out/extension",
     "contributes": {
@@ -41,8 +42,14 @@
         },
         "commands": [
             {
-                "command": "extension.buildTestsTree",
-                "title": "Build tests tree"
+                "command": "extension.runAllTests",
+                "title": "Run all tests",
+                "category": "Mocha"
+            },
+            {
+                "command": "extension.runAllTestsInFile",
+                "title": "Run all tests in file",
+                "category": "Mocha"
             }
         ]
     },
@@ -53,6 +60,7 @@
         "postinstall": "node ./node_modules/vscode/bin/install",
         "test": "npm run compile && node ./node_modules/vscode/bin/test"
     },
+    "dependencies": {},
     "devDependencies": {
         "typescript": "^2.6.1",
         "vscode": "^1.1.6",

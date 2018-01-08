@@ -1,112 +1,44 @@
+'use strict';
+
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn } from 'child_process';
+import {spawn} from 'child_process';
+import MochaTreeDataProvider from './testTree';
 
+const mochaOptsMap: Map<string, MochaOptionInfo> = assembleMochaOptionsInfo();
 
-export default class MochaTestRunner implements vscode.TreeDataProvider<string> {
-    private tree: any;
-    private map: any;
+interface MochaOptionInfo {
+    name: string[],
+    param?: string,
+    comment?: string,
+    ignore?: boolean
+}
 
+export default class MochaTestRunner {
     private context: vscode.ExtensionContext;
+    private tree: MochaTreeDataProvider;
 
-    private _onDidChangeTreeData: vscode.EventEmitter<string | null> = new vscode.EventEmitter<string | null>();
-    readonly onDidChangeTreeData: vscode.Event<string | null> = this._onDidChangeTreeData.event;
-
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, treeDataProvider: MochaTreeDataProvider) {
         this.context = context;
+        this.tree = treeDataProvider;
 
-        this.tree = null;
-        this.map = null;
+        this.context.workspaceState.update('tree', null);
+        this.context.workspaceState.update('map', null);
     }
 
-    getTreeItem(offset: string): vscode.TreeItem {
-        const offsetParts = offset.split('::');
-        const realOffset = offsetParts[0];
-        const virtualOffset = offsetParts[1];
-        const node = this.map[realOffset];
-
-        if (offsetParts.length === 1) {
-            return new vscode.TreeItem(node.title, vscode.TreeItemCollapsibleState.Collapsed);
+    async run(fileName?: string) {
+        if (this.context.workspaceState.get('tree')) {
+            setNodeState(this.context.workspaceState.get('tree'), 'process');
+            this.tree.updateTreeNode();
         }
-
-        switch (virtualOffset) {
-            case 'state': {
-                const label = 'state' + (node.state ? ':' + node.state : '');
-                return new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
-            }
-
-            case 'suites':
-                return Array.isArray(node.suites) && node.suites.length
-                    ? new vscode.TreeItem('suites', vscode.TreeItemCollapsibleState.Collapsed)
-                    : null;
-
-            case 'tests':
-                return Array.isArray(node.tests) && node.tests.length
-                    ? new vscode.TreeItem('tests', vscode.TreeItemCollapsibleState.Collapsed)
-                    : null;
-
-            default:
-                return null;
-        }
-
-        // treeItem.command = {
-        //     command: 'extension.buildTestsTree',
-        //     title: 'say hello',
-        //     arguments: [],
-        //     tooltip: 'test'
-        // };
-
-        //treeItem.iconPath = this.getIcon(valueNode);
-        //treeItem.contextValue = valueNode.type;
-
-    }
-
-    getChildren(offset?: string): Thenable<string[]> {
-        if (!this.map) {
-            return Promise.resolve([]);
-        }
-
-        if (!offset) {
-            return Promise.resolve([this.tree.id]);
-        }
-
-        const offsetParts = offset.split('::');
-        const realOffset = offsetParts[0];
-        const virtualOffset = offsetParts[1];
-        const node = this.map[realOffset];
-
-        if (!node) {
-            return Promise.resolve([]);
-        }
-
-        if (offsetParts.length === 1) {
-            return Promise.resolve([
-                node.id + '::state',
-                ...(Array.isArray(node.suites) && node.suites.length ? [node.id + '::suites'] : []),
-                ...(Array.isArray(node.tests) && node.tests.length ? [node.id + '::tests'] : []),
-            ]);
-        }
-
-        switch (virtualOffset) {
-            case 'suites':
-                return Promise.resolve(node.suites.map((suite) => suite.id));
-
-            case 'tests':
-                return Promise.resolve(node.tests.map((test) => test.id));
-
-            default:
-                return Promise.resolve([]);
-        }
-    }
-
-    async buildTestsTree() {
-        this.tree = [];
 
         const spawnArgs = [
             ...await this.mochaScriptArgument(),
-            ...await this.mochaOptsFileArgument(),
+            '--full-trace',
+            '--no-deprecation',
+            ...await this.mochaOptsArgument(fileName),
             ...await this.mochaReporterArgument()
         ];
         const spawnOpts = {
@@ -128,55 +60,64 @@ export default class MochaTestRunner implements vscode.TreeDataProvider<string> 
                         action = accumTreeJson;
                         return;
                     } else if (line === '</tree>') {
-                        this.tree = JSON.parse(treeJson);
-                        this.map = treeToMap(this.tree);
+                        const tree = JSON.parse(treeJson);
+                        this.context.workspaceState.update('tree', tree);
+                        this.context.workspaceState.update('map', treeToMap(tree));
                         action = null;
-                        this._onDidChangeTreeData.fire();
+                        this.tree.updateTreeNode();
                         return;
                     } else if (line.startsWith('test-fail')) {
                         const id = line.split(' ')[1];
-                        const node = this.map[id];
+                        const node = this.context.workspaceState.get<any>('map')[id];
+                        if (node) {
+                            action = accumError.bind(null, node);
+                        }
+                        return;
+                    } else if (line.startsWith('/test-fail')) {
+                        const id = line.split(' ')[1];
+                        const node = this.context.workspaceState.get<any>('map')[id];
                         if (node) {
                             node.state = 'fail';
-                            this._onDidChangeTreeData.fire(node.id + '::state');
+                            this.tree.updateTreeNode(node.id);
                         }
+                        action = null;
                         return;
                     } else if (line.startsWith('test-pass')) {
                         const id = line.split(' ')[1];
-                        const node = this.map[id];
+                        const node = this.context.workspaceState.get<any>('map')[id];
                         if (node) {
                             node.state = 'pass';
-                            this._onDidChangeTreeData.fire(node.id + '::state');
+                            this.tree.updateTreeNode(node.id);
                         }
                         return;
                     } else if (line.startsWith('test-pend')) {
                         const id = line.split(' ')[1];
-                        const node = this.map[id];
+                        const node = this.context.workspaceState.get<any>('map')[id];
                         if (node) {
-                            node.state = 'pend';
-                            this._onDidChangeTreeData.fire(node.id + '::state');
+                            node.state = 'pending';
+                            this.tree.updateTreeNode(node.id);
                         }
                         return;
                     } else if (line.startsWith('suite-start') || line.startsWith('test-start')) {
                         const id = line.split(' ')[1];
-                        const node = this.map[id];
+                        const node = this.context.workspaceState.get<any>('map')[id];
                         if (node) {
-                            node.state = '...';
+                            node.state = 'progress';
                         }
                         return;
                     } else if (line.startsWith('suite-end')) {
                         const id = line.split(' ')[1];
-                        const node = this.map[id];
+                        const node = this.context.workspaceState.get<any>('map')[id];
                         if (node) {
-                            const state = nodeState(node);
-                            if (state.pass && !state.fail && !state.pend) {
+                            const state = getNodeState(node);
+                            if (state.pass && !state.fail) {
                                 node.state = 'pass';
-                            } else if (state.fail && !state.pass && !state.pend) {
+                            } else if (state.fail) {
                                 node.state = 'fail';
-                            } else {
-                                node.state = 'partial';
+                            } else if (state.pending && !state.fail && !state.pass) {
+                                node.state = 'pending';
                             }
-                            this._onDidChangeTreeData.fire(node.id + '::state');
+                            this.tree.updateTreeNode(node.id);
                         }
                         return;
                     }
@@ -187,8 +128,8 @@ export default class MochaTestRunner implements vscode.TreeDataProvider<string> 
             });
 
             buildTree.stderr.on('data', (data) => {
-                this.tree = null;
-                this.map = null;
+                this.context.workspaceState.update('tree', null);
+                this.context.workspaceState.update('map', null);
                 error += data.toString();
             });
             buildTree.on('close', (code) => {
@@ -197,9 +138,13 @@ export default class MochaTestRunner implements vscode.TreeDataProvider<string> 
 
 
             function accumTreeJson(data) {
-                treeJson += data;
+                treeJson += data + '\n';
             }
-        }).then(() => this._onDidChangeTreeData.fire());
+            function accumError(node, data) {
+                node.error = node.error || '';
+                node.error += data + '\n';
+            }
+        }).then(() => this.tree.updateTreeNode());
     }
 
 
@@ -223,20 +168,30 @@ export default class MochaTestRunner implements vscode.TreeDataProvider<string> 
         throw Error('can not find local/global installed mocha packages or alternative provided by [mocha.path] setting');
     }
 
-    async mochaOptsFileArgument(): Promise<string[]> {
+    async mochaOptsArgument(fileName?: string): Promise<string[]> {
         const confMochaOptsFilePath = vscode.workspace.getConfiguration('mocha').get('optsPath', '');
-        if (!confMochaOptsFilePath) {
-            return Promise.resolve([]);
+        if (confMochaOptsFilePath) {
+            assert(fs.existsSync(confMochaOptsFilePath), 'path defined with [mocha.optsPath] setting not exists');
+            const opts = filterMochaOpts(parseOptsFile(confMochaOptsFilePath), !!fileName);
+            return [...opts, ...(fileName ? [fileName] : []), '--opts', path.join(this.context.extensionPath, 'bin', 'empty.mocha.opts')];
         }
 
-        assert(fs.existsSync(confMochaOptsFilePath), 'path defined with [mocha.optsPath] setting not exists');
-        return Promise.resolve(['--opts', confMochaOptsFilePath]);
+        const localMochaOptsFilePath = path.join(vscode.workspace.rootPath, 'test', 'mocha.opts');
+        if (fs.existsSync(localMochaOptsFilePath)) {
+            const opts = filterMochaOpts(parseOptsFile(localMochaOptsFilePath), !!fileName);
+            return [...opts, , ...(fileName ? [fileName] : []), '--opts', path.join(this.context.extensionPath, 'bin', 'empty.mocha.opts')];
+        }
+
+        return [];
     }
 
     async mochaReporterArgument(): Promise<string[]> {
-        return Promise.resolve(['--reporter', path.join(this.context.extensionPath, 'bin', 'reporter.js')]);
+        return ['--reporter', path.join(this.context.extensionPath, 'bin', 'reporter.js')];
     }
 
+    async mochaFilesArgument(): Promise<string[]> {
+        return []
+    }
 }
 
 // function promisify(fn: Function): Function {
@@ -269,15 +224,148 @@ function treeToMap(tree, map = {}) {
     return map;
 }
 
-function nodeState(node, state = { pass: 0, fail: 0, pend: 0 }) {
+function getNodeState(node, state = {pass: 0, fail: 0, pending: 0}) {
     Array.isArray(node.tests) && node.tests.length
         && node.tests.reduce((state, test) => {
             test.state && (state[test.state]++);
             return state;
-         }, state);
+        }, state);
 
     Array.isArray(node.suites) && node.suites.length
-         && node.suites.forEach((suite) => nodeState(suite, state));
+        && node.suites.forEach((suite) => getNodeState(suite, state));
 
     return state;
+}
+
+function setNodeState(node, state) {
+    node.state = state;
+
+    Array.isArray(node.tests) && node.tests.length && node.tests.forEach((test) => setNodeState(test, state));
+    Array.isArray(node.suites) && node.suites.length && node.suites.forEach((suite) => setNodeState(suite, state));
+}
+
+function parseOptsFile(filePath) {
+    try {
+        const opts = fs
+            .readFileSync(filePath, 'utf8')
+            .replace(/\\\s/g, '%20')
+            .split(/\s/)
+            .filter(Boolean)
+            .map(value => value.replace(/%20/g, ' '));
+
+        return opts;
+    } catch (err) {
+        throw new Error('something wrong with mocha.opts file');
+    }
+}
+
+function assembleMochaOptionsInfo(): Map<string, MochaOptionInfo> {
+    const opts = new Map<string, MochaOptionInfo>();
+
+    ign({name: ['-V', '--version'], comment: 'output the version number'});
+    ign({name: ['-A', '--async-only'], comment: 'force all tests to take a callback (async) or return a promise'});
+    ign({name: ['-c', '--colors'], comment: 'force enabling of colors'});
+    ign({name: ['-C', '--no-colors'], comment: 'force disabling of colors'});
+    ign({name: ['-G', '--growl'], comment: 'enable growl notification support'});
+    ign({name: ['-O', '--reporter-options'], param: '<k=v,k2=v2,...>', comment: 'reporter-specific options'});
+    ign({name: ['-R', '--reporter'], param: '<name>', comment: 'specify the reporter to use'});
+    add({name: ['-S', '--sort'], comment: 'sort test files'});
+    add({name: ['-b', '--bail'], comment: 'bail after first test failure'});
+    ign({name: ['-d', '--debug'], comment: 'enable node\'s debugger, synonym for node --debug'});
+    ign({name: ['-g', '--grep'], param: '<pattern>', comment: 'only run tests matching <pattern>'});
+    ign({name: ['-f', '--fgrep'], param: '<string>', comment: 'only run tests containing <string>'});
+    ign({name: ['-gc', '--expose-gc'], comment: 'expose gc extension'});
+    ign({name: ['-i', '--invert'], comment: 'inverts --grep and --fgrep matches'});
+    add({name: ['-r', '--require'], param: '<name>', comment: 'require the given module'});
+    add({name: ['-s', '--slow'], param: '<ms>', comment: '"slow" test threshold in milliseconds [75]'});
+    add({name: ['-t', '--timeout'], param: '<ms>', comment: 'set test-case timeout in milliseconds [2000]'});
+    ign({name: ['-u', '--ui'], param: '<name>', comment: 'specify user-interface (bdd|tdd|qunit|exports)'});
+    ign({name: ['-w', '--watch'], comment: 'watch files for changes'});
+    ign({name: ['--check-leaks'], comment: 'check for global variable leaks'});
+    add({name: ['--full-trace'], comment: 'display the full stack trace'});
+    add({name: ['--compilers'], param: '<ext>:<module>,...', comment: 'use the given module(s) to compile files'});
+    ign({name: ['--debug-brk'], comment: 'enable node\'s debugger breaking on the first line'});
+    add({name: ['--globals'], param: '<names>', comment: 'allow the given comma-delimited global [names]'});
+    add({name: ['--es_staging'], comment: 'enable all staged features'});
+    add({name: ['--harmony<_classes,_generators,...>'], comment: 'all node --harmony* flags are available'});
+    add({name: ['--preserve-symlinks'], comment: 'Instructs the module loader to preserve symbolic links when resolving and caching modules'});
+    ign({name: ['--icu-data-dir'], comment: 'include ICU data'});
+    ign({name: ['--inline-diffs'], comment: 'display actual/expected differences inline within each string'});
+    ign({name: ['--inspect'], comment: 'activate devtools in chrome'});
+    ign({name: ['--inspect-brk'], comment: 'activate devtools in chrome and break on the first line'});
+    ign({name: ['--interfaces'], comment: 'display available interfaces'});
+    ign({name: ['--no-deprecation'], comment: 'silence deprecation warnings'});
+    ign({name: ['--exit'], comment: 'force shutdown of the event loop after test run: mocha will call process.exit'});
+    ign({name: ['--no-timeouts'], comment: 'disables timeouts, given implicitly with --debug'});
+    ign({name: ['--no-warnings'], comment: 'silence all node process warnings'});
+    ign({name: ['--opts'], param: '<path>', comment: 'specify opts path'});
+    ign({name: ['--perf-basic-prof'], comment: 'enable perf linux profiler (basic support)'});
+    ign({name: ['--napi-modules'], comment: 'enable experimental NAPI modules'});
+    ign({name: ['--prof'], comment: 'log statistical profiling information'});
+    ign({name: ['--log-timer-events'], comment: 'Time events including external callbacks'});
+    ign({name: ['--recursive'], comment: 'include sub directories'});
+    ign({name: ['--reporters'], comment: 'display available reporters'});
+    ign({name: ['--retries'], param: '<times>', comment: 'set numbers of time to retry a failed test case'});
+    ign({name: ['--throw-deprecation'], comment: 'throw an exception anytime a deprecated function is used'});
+    ign({name: ['--trace'], comment: 'trace function calls'});
+    ign({name: ['--trace-deprecation'], comment: 'show stack traces on deprecations'});
+    ign({name: ['--trace-warnings '], comment: 'show stack traces on node process warnings'});
+    add({name: ['--use_strict'], comment: 'enforce strict mode'});
+    ign({name: ['--watch-extensions'], param: '<ext>,...', comment: 'additional extensions to monitor with --watch'});
+    add({name: ['--delay'], comment: 'wait for async suite definition'});
+    ign({name: ['--allow-uncaught'], comment: 'enable uncaught errors to propagate'});
+    ign({name: ['--forbid-only'], comment: 'causes test marked with only to fail the suite'});
+    ign({name: ['--forbid-pending'], comment: 'causes pending tests and test marked with skip to fail the suite'});
+    ign({name: ['-h', '--help'], comment: 'output usage information'});
+
+    return opts;
+
+
+    function add(info: MochaOptionInfo): void {
+        info.name.forEach((name) => {
+            opts[name] = info;
+        });
+    }
+
+    function ign(info: MochaOptionInfo): void {
+        info.ignore = true;
+        info.name.forEach((name) => {
+            opts[name] = info;
+        });
+    }
+}
+
+function filterMochaOpts(opts: string[], all: boolean = true): string[] {
+    const result = [];
+
+    let i: number = 0;
+    while (i < opts.length) {
+        const optName: string = opts[i];
+        const meta: MochaOptionInfo = mochaOptsMap[optName];
+
+        if (meta) {
+            if (meta.ignore) {
+                i = i + 1 + (meta.param ? 1 : 0);
+                continue;
+            }
+
+            result.push(opts[i]);
+            i++;
+
+            if (meta.param) {
+                result.push(opts[i]);
+                i++;
+            }
+
+            continue;
+        }
+
+        if (!all) {
+            result.push(opts[i]);
+        }
+
+        i++;
+    }
+
+    return result;
 }

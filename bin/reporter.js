@@ -34,8 +34,10 @@ function printTestsResult(runner) {
     runner.on('pass', (test) => {
         console.log(`test-pass ${id(test)}`);
     });
-    runner.on('fail', (test) => {
+    runner.on('fail', (test, err) => {
         console.log(`test-fail ${id(test)}`);
+        console.log(err);
+        console.log(`/test-fail ${id(test)}`);
     });
     runner.on('pending', (test) => {
         console.log(`test-pend ${id(test)}`);
@@ -64,10 +66,12 @@ function buildTree(object) {
 function trevelOverSuites(object, parent) {
     const node = {
         id: getId(object.title, parent && parent.id),
+        type: object.type,
         title: object.title,
+        file: object.file
     };
 
-    node.tests = object.tests.map((test) => ({id: getId(test.title, node.id), title: test.title}));
+    node.tests = object.tests.map((test) => ({id: getId(test.title, node.id), type: test.type, title: test.title, file: test.file}));
     node.suites = object.suites.map((suite) => trevelOverSuites(suite, node));
 
     return node;
