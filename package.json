@@ -4,6 +4,7 @@
     "description": "Mocha test runner",
     "version": "0.0.1",
     "publisher": "mujichOk",
+    "repository": "https://github.com/mujichOk/vscode-mocha-test-runner",
     "engines": {
         "vscode": "^1.19.0"
     },
