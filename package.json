@@ -1,7 +1,7 @@
 {
     "name": "mocha-test-runner",
-    "displayName": "mocha-test-runner",
-    "description": "",
+    "displayName": "Mocha Test Runner (alpha)",
+    "description": "Mocha test runner",
     "version": "0.0.1",
     "publisher": "mujichOk",
     "engines": {
