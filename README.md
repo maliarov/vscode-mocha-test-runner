@@ -1,6 +1,6 @@
 # mocha-test-runner
 
-This is early alpha of Mocha Tests Runner extension that allow run mocha tests in more fluent was in vscode. 
+This is early alpha of Mocha Tests Runner extension that allow run mocha tests in more fluent way in vscode. (autodetect mocha.opts location and use all acceptable for runner params like: --require, --compilers, --timeout and etc.)
 
 ## Settings
 
