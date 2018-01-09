@@ -45,6 +45,9 @@ export default class MochaTestRunner {
             cwd: vscode.workspace.rootPath
         };
 
+        console.log('mochaScriptArgument', [...await this.mochaScriptArgument()]);
+        console.log('mochaOptsArgument', fileName, [...await this.mochaOptsArgument(fileName)]);
+
         const buildTree = spawn('node', spawnArgs, spawnOpts);
 
         return new Promise((resolve, reject) => {
@@ -53,9 +56,10 @@ export default class MochaTestRunner {
             let action: Function;
 
             buildTree.stdout.on('data', (data) => {
-                const str = data.toString().split('\n');
+                const context = data.toString();
+                const lines = context.split('\n');
 
-                str.forEach((line) => {
+                lines.forEach((line, lineIndex) => {
                     if (line === '<tree>') {
                         action = accumTreeJson;
                         return;
@@ -122,7 +126,7 @@ export default class MochaTestRunner {
                         return;
                     }
 
-                    action && action(line);
+                    action && action(line + ((lineIndex === lines.length - 1) ? '' : '\n'));
                 });
 
             });
@@ -138,11 +142,11 @@ export default class MochaTestRunner {
 
 
             function accumTreeJson(data) {
-                treeJson += data + '\n';
+                treeJson += data;
             }
             function accumError(node, data) {
                 node.error = node.error || '';
-                node.error += data + '\n';
+                node.error += data;
             }
         }).then(() => this.tree.updateTreeNode());
     }
@@ -179,7 +183,7 @@ export default class MochaTestRunner {
         const localMochaOptsFilePath = path.join(vscode.workspace.rootPath, 'test', 'mocha.opts');
         if (fs.existsSync(localMochaOptsFilePath)) {
             const opts = filterMochaOpts(parseOptsFile(localMochaOptsFilePath), !!fileName);
-            return [...opts, , ...(fileName ? [fileName] : []), '--opts', path.join(this.context.extensionPath, 'bin', 'empty.mocha.opts')];
+            return [...opts, ...(fileName ? [fileName] : []), '--opts', path.join(this.context.extensionPath, 'bin', 'empty.mocha.opts')];
         }
 
         return [];

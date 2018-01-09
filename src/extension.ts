@@ -15,11 +15,21 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(vscode.commands.registerCommand('extension.runAllTests', async () => {
         vscode.window.showInformationMessage('Running all tests');
-        await mochaTestRunner.run();
+        try {
+            await mochaTestRunner.run();
+        } catch (err) {
+            console.error(err);
+            throw err;
+        }
     }));
     context.subscriptions.push(vscode.commands.registerCommand('extension.runAllTestsInFile', async () => {
-        vscode.window.showInformationMessage(`Running all tests in ${vscode.window.activeTextEditor.document.fileName}`);
-        await mochaTestRunner.run(vscode.window.activeTextEditor.document.fileName);
+        try {
+            vscode.window.showInformationMessage(`Running all tests in ${vscode.window.activeTextEditor.document.fileName}`);
+            await mochaTestRunner.run(vscode.window.activeTextEditor.document.fileName);
+        } catch (err) {
+            console.error(err);
+            throw err;
+        }
     }));
     context.subscriptions.push(vscode.commands.registerCommand('extension.showTestPreview', (id: string) => {
         return vscode.commands.executeCommand('vscode.previewHtml', vscode.Uri.parse(`mocha-test-result://view?${id}`), vscode.ViewColumn.Two, 'Test Results Preview')

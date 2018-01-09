@@ -2,7 +2,7 @@
     "name": "mocha-test-runner",
     "displayName": "Mocha Test Runner (alpha)",
     "description": "Mocha test runner",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "publisher": "mujichOk",
     "repository": "https://github.com/mujichOk/vscode-mocha-test-runner",
     "engines": {
