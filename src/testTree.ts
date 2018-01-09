@@ -1,17 +1,17 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import ICommonState from './ICommonState';
 
 export default class MochaTreeDataProvider implements vscode.TreeDataProvider<string> {
     private context: vscode.ExtensionContext;
+    private state: ICommonState;
 
     private _onDidChangeTreeData: vscode.EventEmitter<string | null> = new vscode.EventEmitter<string | null>();
     readonly onDidChangeTreeData: vscode.Event<string | null> = this._onDidChangeTreeData.event;
 
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, state: ICommonState) {
         this.context = context;
-
-        this.context.workspaceState.update('tree', null);
-        this.context.workspaceState.update('map', null);
+        this.state = state;
     }
 
     updateTreeNode(id?: string): void {
@@ -27,7 +27,7 @@ export default class MochaTreeDataProvider implements vscode.TreeDataProvider<st
     }
 
     getTreeItem(offset: string): vscode.TreeItem {
-        const node = this.context.workspaceState.get('map')[offset];
+        const node: any = this.state.map && this.state.map[offset];
         if (!node) {
             return null;
         }
@@ -67,15 +67,15 @@ export default class MochaTreeDataProvider implements vscode.TreeDataProvider<st
     }
 
     getChildren(offset?: string): Thenable<string[]> {
-        if (!this.context.workspaceState.get('tree')) {
+        if (!this.state.tree) {
             return Promise.resolve([]);
         }
 
         if (!offset) {
-            return Promise.resolve([this.context.workspaceState.get<any>('tree').id]);
+            return Promise.resolve([this.state.tree.id]);
         }
 
-        const node = this.context.workspaceState.get<any>('map')[offset];
+        const node: any = this.state.map && this.state.map[offset];
         if (!node) {
             return Promise.resolve([]);
         }

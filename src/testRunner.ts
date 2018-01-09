@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {spawn} from 'child_process';
 import MochaTreeDataProvider from './testTree';
+import ICommonState from './ICommonState';
 
 const mochaOptsMap: Map<string, MochaOptionInfo> = assembleMochaOptionsInfo();
 
@@ -18,19 +19,20 @@ interface MochaOptionInfo {
 
 export default class MochaTestRunner {
     private context: vscode.ExtensionContext;
+    private state: ICommonState;
+
     private tree: MochaTreeDataProvider;
 
-    constructor(context: vscode.ExtensionContext, treeDataProvider: MochaTreeDataProvider) {
+    constructor(context: vscode.ExtensionContext, state: ICommonState, treeDataProvider: MochaTreeDataProvider) {
         this.context = context;
-        this.tree = treeDataProvider;
+        this.state = state;
 
-        this.context.workspaceState.update('tree', null);
-        this.context.workspaceState.update('map', null);
+        this.tree = treeDataProvider;
     }
 
     async run(fileName?: string) {
-        if (this.context.workspaceState.get('tree')) {
-            setNodeState(this.context.workspaceState.get('tree'), 'process');
+        if (this.state.tree) {
+            setNodeState(this.state.tree, 'process');
             this.tree.updateTreeNode();
         }
 
@@ -53,61 +55,63 @@ export default class MochaTestRunner {
             let action: Function;
 
             buildTree.stdout.on('data', (data) => {
-                const str = data.toString().split('\n');
+                const content: string = data.toString();
+                const lines: string[] = content.split('\n');
 
-                str.forEach((line) => {
-                    if (line === '<tree>') {
+                lines.forEach((line, lineIndex) => {
+                    const command: string = line.trim();
+                    if (command === '<tree>') {
                         action = accumTreeJson;
                         return;
-                    } else if (line === '</tree>') {
-                        const tree = JSON.parse(treeJson);
-                        this.context.workspaceState.update('tree', tree);
-                        this.context.workspaceState.update('map', treeToMap(tree));
+                    } else if (command === '</tree>') {
                         action = null;
+                        const tree = JSON.parse(treeJson);
+                        this.state.tree = tree;
+                        this.state.map = treeToMap(tree);
                         this.tree.updateTreeNode();
                         return;
-                    } else if (line.startsWith('test-fail')) {
-                        const id = line.split(' ')[1];
-                        const node = this.context.workspaceState.get<any>('map')[id];
+                    } else if (command.startsWith('test-fail')) {
+                        const id = command.split(' ')[1];
+                        const node = this.state.map && this.state.map[id];
                         if (node) {
                             action = accumError.bind(null, node);
                         }
                         return;
-                    } else if (line.startsWith('/test-fail')) {
-                        const id = line.split(' ')[1];
-                        const node = this.context.workspaceState.get<any>('map')[id];
+                    } else if (command.startsWith('/test-fail')) {
+                        const id = command.split(' ')[1];
+                        const node = this.state.map && this.state.map[id];
                         if (node) {
                             node.state = 'fail';
                             this.tree.updateTreeNode(node.id);
                         }
                         action = null;
                         return;
-                    } else if (line.startsWith('test-pass')) {
-                        const id = line.split(' ')[1];
-                        const node = this.context.workspaceState.get<any>('map')[id];
+                    } else if (command.startsWith('test-pass')) {
+                        const id = command.split(' ')[1];
+                        const node = this.state.map && this.state.map[id];
                         if (node) {
                             node.state = 'pass';
                             this.tree.updateTreeNode(node.id);
                         }
                         return;
-                    } else if (line.startsWith('test-pend')) {
-                        const id = line.split(' ')[1];
-                        const node = this.context.workspaceState.get<any>('map')[id];
+                    } else if (command.startsWith('test-pend')) {
+                        const id = command.split(' ')[1];
+                        const node = this.state.map && this.state.map[id];
                         if (node) {
                             node.state = 'pending';
                             this.tree.updateTreeNode(node.id);
                         }
                         return;
-                    } else if (line.startsWith('suite-start') || line.startsWith('test-start')) {
-                        const id = line.split(' ')[1];
-                        const node = this.context.workspaceState.get<any>('map')[id];
+                    } else if (command.startsWith('suite-start') || command.startsWith('test-start')) {
+                        const id = command.split(' ')[1];
+                        const node = this.state.map && this.state.map[id];
                         if (node) {
                             node.state = 'progress';
                         }
                         return;
-                    } else if (line.startsWith('suite-end')) {
-                        const id = line.split(' ')[1];
-                        const node = this.context.workspaceState.get<any>('map')[id];
+                    } else if (command.startsWith('suite-end')) {
+                        const id = command.split(' ')[1];
+                        const node = this.state.map && this.state.map[id];
                         if (node) {
                             const state = getNodeState(node);
                             if (state.pass && !state.fail) {
@@ -122,14 +126,12 @@ export default class MochaTestRunner {
                         return;
                     }
 
-                    action && action(line);
+                    action && action(line + ((lineIndex === lines.length - 1) ? '' : '\n'));
                 });
 
             });
 
             buildTree.stderr.on('data', (data) => {
-                this.context.workspaceState.update('tree', null);
-                this.context.workspaceState.update('map', null);
                 error += data.toString();
             });
             buildTree.on('close', (code) => {
@@ -138,11 +140,11 @@ export default class MochaTestRunner {
 
 
             function accumTreeJson(data) {
-                treeJson += data + '\n';
+                treeJson += data;
             }
             function accumError(node, data) {
                 node.error = node.error || '';
-                node.error += data + '\n';
+                node.error += data;
             }
         }).then(() => this.tree.updateTreeNode());
     }
@@ -179,7 +181,7 @@ export default class MochaTestRunner {
         const localMochaOptsFilePath = path.join(vscode.workspace.rootPath, 'test', 'mocha.opts');
         if (fs.existsSync(localMochaOptsFilePath)) {
             const opts = filterMochaOpts(parseOptsFile(localMochaOptsFilePath), !!fileName);
-            return [...opts, , ...(fileName ? [fileName] : []), '--opts', path.join(this.context.extensionPath, 'bin', 'empty.mocha.opts')];
+            return [...opts, ...(fileName ? [fileName] : []), '--opts', path.join(this.context.extensionPath, 'bin', 'empty.mocha.opts')];
         }
 
         return [];

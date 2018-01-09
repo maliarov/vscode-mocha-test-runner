@@ -1,21 +1,23 @@
 'use strict';
 
 import * as vscode from 'vscode';
+import ICommonState from './ICommonState';
 
 export default class MochaTestDocumentContentProvider implements vscode.TextDocumentContentProvider {
     private context: vscode.ExtensionContext;
+    private state: ICommonState;
 
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, state: ICommonState) {
         this.context = context;
+        this.state = state;
     }
 
     public provideTextDocumentContent(uri: vscode.Uri): string {
-        const map: any = this.context.workspaceState.get<any>('map');
-        if (!map) {
+        if (!this.state.map) {
             return 'test data not ready';
         }
         
-        const node: any = map[uri.query];
+        const node: any = this.state.map[uri.query];
         if (!node) {
             return 'test not found';
         }
