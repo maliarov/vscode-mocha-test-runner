@@ -2,33 +2,35 @@
 
 import * as vscode from 'vscode';
 
+import TestState from './models/TestState';
+import Test from './models/Test';
+import Tests from './models/Tests';
+
+
 export default class MochaTestDocumentContentProvider implements vscode.TextDocumentContentProvider {
     private context: vscode.ExtensionContext;
+    private tests: Tests;
 
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, tests: Tests) {
         this.context = context;
+        this.tests = tests;
     }
 
     public provideTextDocumentContent(uri: vscode.Uri): string {
-        const map: any = this.context.workspaceState.get<any>('map');
-        if (!map) {
-            return 'test data not ready';
-        }
-        
-        const node: any = map[uri.query];
-        if (!node) {
+        const test: Test = this.tests.getById(uri.query);
+        if (!test) {
             return 'test not found';
         }
 
-        switch (node.state) {
-            case 'fail':
-                const html = node.error.split('\n').join('<br/>');
+        switch (test.state) {
+            case TestState.fail:
+                const html = test.error.split('\n').join('<br/>');
                 return `<html><body><pre>${html}</pre></body></html>` || 'no error data';
-            case 'pending':
+            case TestState.pending:
                 return 'test skipped';
-            case 'pass':
+            case TestState.success:
                 return 'test successed';
-            case 'progress':
+            case TestState.progress:
                 return 'test is in progress';
             default:
                 return '';

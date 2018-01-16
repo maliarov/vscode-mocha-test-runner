@@ -7,57 +7,34 @@ module.exports = Reporter;
 
 function Reporter(runner) {
     mocha.reporters.Base.call(this, runner);
-    runner.suite.title = runner.suite.title || 'root';
+    runner.suite.title = 'root';
 
-    printTestsTree(runner);
-    printTestsResult(runner);
+    testsTree(runner);
+    testsResult(runner);
 }
 
-function printTestsTree(runner) {
-    console.log('<tree>');
-    console.log(JSON.stringify(buildTree(runner.suite)));
-    console.log('</tree>');
+function testsTree(runner) {
+    send('tests:tree', buildTree(runner.suite));
 }
 
-function printTestsResult(runner) {
-    runner.on('suite', (suite) => {
-        console.log(`suite-start ${id(suite)}`);
-    });
-    runner.on('suite end', (suite) => {
-        console.log(`suite-end ${id(suite)}`);
-    });
-
-
-    runner.on('test', (test) => {
-        console.log(`test-start ${id(test)}`);
-    });
-    runner.on('pass', (test) => {
-        console.log(`test-pass ${id(test)}`);
-    });
-    runner.on('fail', (test, err) => {
-        console.log(`test-fail ${id(test)}`);
-        console.log(err);
-        console.log(`/test-fail ${id(test)}`);
-    });
-    runner.on('pending', (test) => {
-        console.log(`test-pend ${id(test)}`);
-    });
-    runner.on('test end', (test) => {
-        console.log(`test-end ${id(test)}`);
-    });
-
-
-    runner.on('start', () => {
-        //console.log('<report>');
-    });
-
+function testsResult(runner) {
+    runner.on('start', () => send('tests::start'));
+    runner.on('suite', (suite) => send('suite::start', {id: id(suite)}));
+    runner.on('test', (test) => send('test::start', {id: id(test)}));
+    runner.on('pass', (test) => send('test::success', {id: id(test)}));
+    runner.on('fail', (test, error) => send('test::fail', {id: id(test), error}));
+    runner.on('pending', (test) => send('test::pending', {id: id(test)}));
+    runner.on('test end', (test) => send('test::end', {id: id(test)}));
+    runner.on('suite end', (suite) => send('suite::end', {id: id(suite)}));
     runner.on('end', () => {
-        //console.log('</report>');
+        send('tests::end');
         process.exit(0);
     });
 }
 
-
+function send(command, payload) {
+    console.log(JSON.stringify({command, payload}));
+}
 
 function buildTree(object) {
     return trevelOverSuites(object);
@@ -71,15 +48,22 @@ function trevelOverSuites(object, parent) {
         file: object.file
     };
 
-    node.tests = object.tests.map((test) => ({id: getId(test.title, node.id), type: test.type, title: test.title, file: test.file}));
+    node.tests = object.tests.map((test) => ({
+        id: getId(test.title, node.id),
+        type: test.type,
+        title: test.title,
+        file: test.file
+    }));
+
     node.suites = object.suites.map((suite) => trevelOverSuites(suite, node));
 
     return node;
 }
 
 function getId(value, parentValue) {
-    return (parentValue ? parentValue + '|' : '') + new Buffer(value).toString('base64');
+    return (parentValue ? parentValue + '|' : '') + (value === 'root' ? value : new Buffer(value).toString('base64'));
 }
+
 
 function id(object) {
     if (!object) {
@@ -87,5 +71,5 @@ function id(object) {
     }
 
     const prefix = id(object.parent);
-    return (prefix ? prefix + '|' : '') + new Buffer(object.title).toString('base64');
+    return (prefix ? prefix + '|' : '') + (object.title === 'root' ? object.title : new Buffer(object.title).toString('base64'));
 }

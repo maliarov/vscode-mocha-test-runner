@@ -12,6 +12,7 @@
         "Other"
     ],
     "activationEvents": [
+        "onCommand:extension.stopTests",
         "onCommand:extension.runAllTests",
         "onCommand:extension.runAllTestsInFile"
     ],
@@ -45,14 +46,35 @@
             {
                 "command": "extension.runAllTests",
                 "title": "Run all tests",
-                "category": "Mocha"
+                "category": "Mocha",
+                "icon": "assets/default/icon-start.png"
             },
             {
                 "command": "extension.runAllTestsInFile",
                 "title": "Run all tests in file",
                 "category": "Mocha"
+            },
+            {
+                "command": "extension.stopTests",
+                "title": "Stop tests",
+                "category": "Mocha",
+                "icon": "assets/default/icon-stop.png"
             }
-        ]
+        ],
+        "menus": {
+			"view/title": [
+				{
+					"command": "extension.runAllTests",
+					"when": "view == testRunner",
+                    "group": "navigation"
+				},
+				{
+					"command": "extension.stopTests",
+					"when": "view == testRunner",
+					"group": "navigation"
+				}
+            ]
+        }
     },
     "scripts": {
         "vscode:prepublish": "npm run compile",
@@ -61,7 +83,9 @@
         "postinstall": "node ./node_modules/vscode/bin/install",
         "test": "npm run compile && node ./node_modules/vscode/bin/test"
     },
-    "dependencies": {},
+    "dependencies": {
+        "@types/event-stream": "3.3.33"
+    },
     "devDependencies": {
         "typescript": "^2.6.1",
         "vscode": "^1.1.6",

@@ -1,46 +1,43 @@
-import * as vscode from 'vscode';
 import * as path from 'path';
+import * as vscode from 'vscode';
+
+import TestState from './models/TestState';
+import Test from './models/Test';
+import Suite from './models/Suite';
+import Tests from './models/Tests';
 
 export default class MochaTreeDataProvider implements vscode.TreeDataProvider<string> {
+    private changeTreeDataEmmiter: vscode.EventEmitter<string | null> = new vscode.EventEmitter<string | null>();
+
     private context: vscode.ExtensionContext;
+    private tests: Tests;
 
-    private _onDidChangeTreeData: vscode.EventEmitter<string | null> = new vscode.EventEmitter<string | null>();
-    readonly onDidChangeTreeData: vscode.Event<string | null> = this._onDidChangeTreeData.event;
+    readonly onDidChangeTreeData: vscode.Event<string | null> = this.changeTreeDataEmmiter.event;
 
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, tests: Tests) {
         this.context = context;
+        this.tests = tests;
 
-        this.context.workspaceState.update('tree', null);
-        this.context.workspaceState.update('map', null);
-    }
-
-    updateTreeNode(id?: string): void {
-        this._onDidChangeTreeData.fire(id);
-    } 
-
-    getTreeItemStateIcon(node): string {
-        if (['pass', 'fail', 'progress', 'pending'].indexOf(node.state) === -1) {
-            return null;
-        }
-
-        return this.context.asAbsolutePath(path.join('assets', 'default', `icon-${node.state}.png`));
+        this.tests.onNodeChanged((offset?: string) => {
+            this.changeTreeDataEmmiter.fire(offset);
+        });
     }
 
     getTreeItem(offset: string): vscode.TreeItem {
-        const node = this.context.workspaceState.get('map')[offset];
-        if (!node) {
+        const test: Test = this.tests.getById(offset);
+        if (!test) {
             return null;
         }
 
         const collapsibleState: vscode.TreeItemCollapsibleState =
-            (Array.isArray(node.suites) && node.suites.length) || (Array.isArray(node.tests) && node.tests.length)
+            (test instanceof Suite)
                 ? vscode.TreeItemCollapsibleState.Collapsed
                 : vscode.TreeItemCollapsibleState.None;
 
         let treeItem: vscode.TreeItem;
 
-        treeItem = new vscode.TreeItem(node.title, collapsibleState);
-        treeItem.iconPath = this.getTreeItemStateIcon(node);
+        treeItem = new vscode.TreeItem(test.title, collapsibleState);
+        treeItem.iconPath = this.getTreeItemStateIcon(test);
 
         /*
         if (node.file) {
@@ -54,6 +51,7 @@ export default class MochaTreeDataProvider implements vscode.TreeDataProvider<st
         }
         */
 
+        /*
         if (node.error) {
             treeItem.command = {
                 command: 'extension.showTestPreview',
@@ -61,28 +59,37 @@ export default class MochaTreeDataProvider implements vscode.TreeDataProvider<st
                 arguments: [node.id]
             };
         }
-
+        */
 
         return treeItem;
     }
 
     getChildren(offset?: string): Thenable<string[]> {
-        if (!this.context.workspaceState.get('tree')) {
-            return Promise.resolve([]);
-        }
-
         if (!offset) {
-            return Promise.resolve([this.context.workspaceState.get<any>('tree').id]);
+            return Promise.resolve([this.tests.getRoot().id]);
         }
 
-        const node = this.context.workspaceState.get<any>('map')[offset];
+        const node: Test = this.tests.getById(offset);
         if (!node) {
-            return Promise.resolve([]);
+            return Promise.resolve(null);
         }
 
-        return Promise.resolve([
-            ...(Array.isArray(node.suites) && node.suites.length ? node.suites.map((suite) => suite.id) : []),
-            ...(Array.isArray(node.tests) && node.tests.length ? node.tests.map((test) => test.id) : [])
-        ]);
+        if (node instanceof Suite) {
+            return Promise.resolve([
+                ...node.suites.map((suite) => suite.id),
+                ...node.tests.map((test) => test.id)
+            ]);
+        }
+
+        return Promise.resolve(null);
+    }
+
+    getTreeItemStateIcon(test: Test): string {
+        if ([TestState.success, TestState.fail, TestState.progress, TestState.pending].indexOf(test.state) === -1) {
+            return null;
+        }
+
+        const iconFileName: string = `icon-${test.state.toString()}.png`;
+        return this.context.asAbsolutePath(path.join('assets', 'default', iconFileName));
     }
 }
