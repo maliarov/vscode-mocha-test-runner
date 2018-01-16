@@ -1,6 +1,7 @@
 'use strict';
 
 import * as vscode from 'vscode';
+import ICommonState from './ICommonState';
 import MochaTestRunner from './testRunner';
 import MochaTestTreeDataProvider from './testTree';
 import MochaTestDocumentContentProvider from './testDocument';
@@ -15,7 +16,6 @@ export function activate(context: vscode.ExtensionContext) {
     const mochaTestTreeDataProvider: MochaTestTreeDataProvider = new MochaTestTreeDataProvider(context, tests);
     const mochaTestRunner = new MochaTestRunner(context, tests);
 
-
     vscode.window.registerTreeDataProvider('testRunner', mochaTestTreeDataProvider);
     vscode.workspace.registerTextDocumentContentProvider('mocha-test-result', mochaTestContentPreviewProvider);
 
@@ -25,6 +25,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('extension.stopTests', async () => {
         vscode.window.showInformationMessage('Stop tests');
 
+        // progess test
         vscode.window.withProgress({location: vscode.ProgressLocation.Window, title: 'test' }, async (process: vscode.Progress<{message?: string}>) => {
             return new Promise((resolve, reject) => {
 
@@ -63,18 +64,24 @@ export function activate(context: vscode.ExtensionContext) {
             throw err;
         }
     }));
+
     context.subscriptions.push(vscode.commands.registerCommand('extension.runAllTestsInFile', async () => {
         try {
-            vscode.window.showInformationMessage(`Running all tests in ${vscode.window.activeTextEditor.document.fileName}`);
-            await mochaTestRunner.run(vscode.window.activeTextEditor.document.fileName);
+            const fileName: string = vscode.window.activeTextEditor.document.fileName;
+            vscode.window.showInformationMessage(`Running all tests in ${fileName}`);
+            await mochaTestRunner.run(fileName);
         } catch (err) {
-            console.error(err);
-            throw err;
+            vscode.window.showErrorMessage(err);
         }
     }));
-    context.subscriptions.push(vscode.commands.registerCommand('extension.showTestPreview', (id: string) => {
-        return vscode.commands.executeCommand('vscode.previewHtml', vscode.Uri.parse(`mocha-test-result://view?${id}`), vscode.ViewColumn.Two, 'Test Results Preview')
-            .then((success) => {}, (reason) => vscode.window.showErrorMessage(reason));
+
+    context.subscriptions.push(vscode.commands.registerCommand('extension.showTestPreview', async (id: string) => {
+        try {
+            const url: vscode.Uri = vscode.Uri.parse(`mocha-test-result://view?${id}`);
+            await vscode.commands.executeCommand('vscode.previewHtml', url, vscode.ViewColumn.Two, 'Test Results Preview')
+        } catch (err) {
+            vscode.window.showErrorMessage(err);
+        }
     }));
 }
 
