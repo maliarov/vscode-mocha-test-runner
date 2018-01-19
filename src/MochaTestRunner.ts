@@ -25,12 +25,32 @@ interface Command {
     payload?: Payload
 }
 
+export enum MochaTestRunnerStates {
+    starting,
+    start,
+    startSuite,
+    startTest,
+    finishTest,
+    finishSuite,
+    stopping,
+    stopped,
+    fails
+}
+
+export interface MochaTestRunnerStateData {
+    state: MochaTestRunnerStates;
+    payload?: any;
+}
+
 export default class MochaTestRunner {
     private context: vscode.ExtensionContext;
     private childProcess: ChildProcess;
     private tests: Tests;
 
+    private onChangeStateEmmiter: vscode.EventEmitter<MochaTestRunnerStateData>
+        = new vscode.EventEmitter<MochaTestRunnerStateData>();
 
+    public onChangeState: vscode.Event<MochaTestRunnerStateData> = this.onChangeStateEmmiter.event;
 
     constructor(context: vscode.ExtensionContext, tests: Tests) {
         this.context = context;
@@ -42,12 +62,12 @@ export default class MochaTestRunner {
             this.childProcess.unref();
             this.childProcess = null;
         }
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.stopped});
     }
 
     async run(fileName?: string): Promise<void> {
-        this.stop();
-
-        //this.tests.setState(null, 'process', true);
+        this.tests.getRoot().setState(TestState.progress);
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.starting});
 
         const spawnArgs = [
             ...await this.mochaScriptArguments(),
@@ -68,7 +88,6 @@ export default class MochaTestRunner {
                 .pipe(es.split('\n'))
                 .pipe(es.parse())
                 .pipe(es.map((command: Command, cb: Function) => {
-                    //console.log('command', command);
                     Promise.resolve(this.onData(command)).then(cb.bind(this, null), (err) => cb(err));
                 }));
 
@@ -79,17 +98,19 @@ export default class MochaTestRunner {
                     //reject(new Error(data.toString()))
                 });
 
-            this.childProcess.on('close', (code) => code ? reject() : resolve());
+            this.childProcess.on('close', (code) => code ? reject(code) : resolve());
         });
     }
 
 
     onData(command: Command): Promise<any> {
         switch (command.command) {
-            case 'tests:tree': return this.onTestsTreeCommand(command.payload);
-            case 'tests:start': return this.onTestsStartCommand();
+            case 'tests::tree': return this.onTestsTreeCommand(command.payload);
 
-            case 'suite:start': {
+            case 'tests::start':
+                return this.onTestsStartCommand();
+
+            case 'suite::start': {
                 const suite: Suite = <Suite>this.tests.getById(command.payload.id);
                 if (!suite) {
                     return;
@@ -97,7 +118,7 @@ export default class MochaTestRunner {
                 return this.onSuiteStartCommand(suite);
             }
 
-            case 'test:start': {
+            case 'test::start': {
                 const test: Test = this.tests.getById(command.payload.id);
                 if (!test) {
                     return;
@@ -105,7 +126,7 @@ export default class MochaTestRunner {
                 return this.onTestStartCommand(test);
             }
 
-            case 'test:success': {
+            case 'test::success': {
                 const test: Test = this.tests.getById(command.payload.id);
                 if (!test) {
                     return;
@@ -113,7 +134,7 @@ export default class MochaTestRunner {
                 return this.onTestSuccessCommand(test);
             }
 
-            case 'test:fail': {
+            case 'test::fail': {
                 const test: Test = this.tests.getById(command.payload.id);
                 if (!test) {
                     return;
@@ -121,7 +142,7 @@ export default class MochaTestRunner {
                 return this.onTestFailCommand(test, command.payload);
             }
 
-            case 'test:pending': {
+            case 'test::pending': {
                 const test: Test = this.tests.getById(command.payload.id);
                 if (!test) {
                     return;
@@ -129,7 +150,7 @@ export default class MochaTestRunner {
                 return this.onTestPendingCommand(test);
             }
 
-            case 'test:end': {
+            case 'test::end': {
                 const test: Test = this.tests.getById(command.payload.id);
                 if (!test) {
                     return;
@@ -137,7 +158,7 @@ export default class MochaTestRunner {
                 return this.onTestEndCommand(test);
             }
 
-            case 'suite:end': {
+            case 'suite::end': {
                 const suite: Suite = <Suite>this.tests.getById(command.payload.id);
                 if (!suite) {
                     return;
@@ -145,61 +166,67 @@ export default class MochaTestRunner {
                 return this.onSuiteEndCommand(suite);
             }
 
-            case 'tests:end': return this.onTestsEndCommand();
+            case 'tests::end': return this.onTestsEndCommand();
         }
     }
 
     async onTestsTreeCommand(tree: any): Promise<void> {
-        travelOverNodes(tree, this.tests.getRoot());
+        this.travelOverNodes(tree, this.tests.getRoot());
 
         this.tests.buildIndexes();
         this.tests.emit();
+    }
+    
+    travelOverNodes(node: any, parent: Suite): void {
+        const tests: Test[] = node.tests.forEach((data: any) => {
+            const test: Test = new Test(this.tests, data.id, data.title, data.file);
+            parent.addChild(test);
+        });
 
-
-        function travelOverNodes(node: any, parent: Suite): void {
-            const tests: Test[] = node.tests.forEach((data: any) => {
-                const test: Test = new Test(data.id, data.title, data.file);
-                parent.addChild(test);
-            });
-
-            const suites: Suite[] = node.suites.forEach((data: any) => {
-                const suite: Suite = new Suite(data.id, data.title, data.file);
-                travelOverNodes(data, suite);
-                parent.addChild(suite);
-            });
-        }
+        const suites: Suite[] = node.suites.forEach((data: any) => {
+            const suite: Suite = new Suite(this.tests, data.id, data.title, data.file);
+            this.travelOverNodes(data, suite);
+            parent.addChild(suite);
+        });
     }
 
-    async onTestsStartCommand(): Promise<void> {
 
+
+    async onTestsStartCommand(): Promise<void> {
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.start});
     }
 
     async onTestsEndCommand(): Promise<void> {
-
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.stopped});
     }
 
     async onTestStartCommand(test: Test): Promise<void> {
         test.setState(TestState.progress);
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.startTest, payload: test});
     }
 
     async onTestSuccessCommand(test: Test): Promise<void> {
         test.setState(TestState.success);
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: test});
     }
 
     async onTestFailCommand(test: Test, error: any): Promise<void> {
         test.setState(TestState.fail);
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: test});
     }
 
     async onTestPendingCommand(test: Test): Promise<void> {
         test.setState(TestState.pending);
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: test});
     }
 
     async onTestEndCommand(test: Test): Promise<void> {
-
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: test});
     }
 
     async onSuiteStartCommand(suite: Suite): Promise<void> {
         suite.setState(TestState.progress);
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.startSuite, payload: suite});
     }
 
     async onSuiteEndCommand(suite: Suite): Promise<void> {
@@ -211,6 +238,7 @@ export default class MochaTestRunner {
         } else if (stateMap.pending && !stateMap.fail && !stateMap.success) {
             suite.setState(TestState.pending);
         }
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishSuite, payload: suite});
     }
 
 

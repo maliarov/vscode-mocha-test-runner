@@ -5,6 +5,7 @@ import Tests from './Tests';
 
 
 export default class Test {
+    owner: Tests;
     parent: Suite;
 
     id: string;
@@ -14,14 +15,16 @@ export default class Test {
     file: string;
     error?: string;
 
-    constructor(id: string, title: string, file: string) {
+    constructor(owner: Tests, id: string, title: string, file: string) {
+        this.owner = owner;
         this.id = id;
         this.title = title;
         this.file = file;
     }
 
-    setState(value: TestState): void {
+    setState(value: TestState, emit: boolean = true): void {
         this.state = value;
+        emit && this.owner.emit(this.id);
     }
 
     getStateMap(): TestStateMap {

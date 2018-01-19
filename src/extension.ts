@@ -1,12 +1,14 @@
 'use strict';
 
 import * as vscode from 'vscode';
-import ICommonState from './ICommonState';
-import MochaTestRunner from './testRunner';
+import MochaTestRunner, {MochaTestRunnerStateData, MochaTestRunnerStates} from './MochaTestRunner';
 import MochaTestTreeDataProvider from './testTree';
 import MochaTestDocumentContentProvider from './testDocument';
 
+import Test from './models/Test';
 import Tests from './models/Tests';
+
+const progressOptions: vscode.ProgressOptions = {location: vscode.ProgressLocation.Window, title: 'preparing tests'};
 
 
 export function activate(context: vscode.ExtensionContext) {
@@ -14,40 +16,23 @@ export function activate(context: vscode.ExtensionContext) {
 
     const mochaTestContentPreviewProvider: MochaTestDocumentContentProvider = new MochaTestDocumentContentProvider(context, tests);
     const mochaTestTreeDataProvider: MochaTestTreeDataProvider = new MochaTestTreeDataProvider(context, tests);
+
     const mochaTestRunner = new MochaTestRunner(context, tests);
+
+
+    mochaTestRunner.onChangeState((stateData: MochaTestRunnerStateData) => {
+        switch (stateData.state) {
+            case MochaTestRunnerStates.starting:
+                return showProgress();
+        }
+    });
+
 
     vscode.window.registerTreeDataProvider('testRunner', mochaTestTreeDataProvider);
     vscode.workspace.registerTextDocumentContentProvider('mocha-test-result', mochaTestContentPreviewProvider);
-
-
-    //const task: Task<>: 
+    
 
     context.subscriptions.push(vscode.commands.registerCommand('extension.stopTests', async () => {
-        vscode.window.showInformationMessage('Stop tests');
-
-        // progess test
-        vscode.window.withProgress({location: vscode.ProgressLocation.Window, title: 'test' }, async (process: vscode.Progress<{message?: string}>) => {
-            return new Promise((resolve, reject) => {
-
-                process.report({message: '0'});
-
-                for (let i = 1; i <= 10; i++) {
- 
-                    setTimeout(() => {
-                        process.report({message: i.toString()});
-                    }, i * 1000);
-        
-                }
-
-                setTimeout(() => {
-                    process.report({message: '100'});
-                    resolve();
-                }, 11*1000);
-
-            });
-
-        });
-        
         try {
             mochaTestRunner.stop();
         } catch (err) {
@@ -55,8 +40,8 @@ export function activate(context: vscode.ExtensionContext) {
             throw err;
         }
     }));
+
     context.subscriptions.push(vscode.commands.registerCommand('extension.runAllTests', async () => {
-        vscode.window.showInformationMessage('Running all tests');
         try {
             await mochaTestRunner.run();
         } catch (err) {
@@ -83,7 +68,44 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage(err);
         }
     }));
+
+
+    function showProgress(): void {
+        vscode.window.withProgress(progressOptions, onProgress);
+    }
+
+    async function onProgress(process: vscode.Progress<{message?: string}>): Promise<void> {
+        let onChangeStateDisposer: vscode.Disposable;
+    
+        return new Promise<void>((resolve, reject) => {
+            onChangeStateDisposer = mochaTestRunner.onChangeState((stateData: MochaTestRunnerStateData) => {
+                switch (stateData.state) {
+                    case MochaTestRunnerStates.starting:
+                        return process.report({message: 'preparing tests'});
+    
+                    case MochaTestRunnerStates.start:
+                        return process.report({message: 'starting tests'});
+    
+                    case MochaTestRunnerStates.startTest:
+                        const test: Test = <Test>stateData.payload;
+                        return process.report({message: `[test] ${test.title}`});
+    
+                    case MochaTestRunnerStates.fails:
+                    case MochaTestRunnerStates.stopped:
+                        resolve();
+                        return;
+                }
+            });
+        })
+        .then(onDone)
+        .catch(onDone);
+    
+        function onDone(): void {
+            onChangeStateDisposer.dispose();
+        }
+    }
 }
 
 export function deactivate() {
 }
+

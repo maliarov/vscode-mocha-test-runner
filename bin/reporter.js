@@ -14,7 +14,7 @@ function Reporter(runner) {
 }
 
 function testsTree(runner) {
-    send('tests:tree', buildTree(runner.suite));
+    send('tests::tree', buildTree(runner.suite));
 }
 
 function testsResult(runner) {

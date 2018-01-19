@@ -8,18 +8,18 @@ export default class Suite extends Test {
     tests: Test[];
     suites: Suite[];
 
-    constructor(id: string, title: string, file: string) {
-        super(id, title, file);
+    constructor(owner: Tests, id: string, title: string, file: string) {
+        super(owner, id, title, file);
 
         this.tests = [];
         this.suites = [];
     }
 
-    setState(value: TestState): void {
-        super.setState(value);
+    setState(value: TestState, emit: boolean = true): void {
+        this.tests.forEach((test) => test.setState(value, false));
+        this.suites.forEach((suite) => suite.setState(value, false));
 
-        this.tests.forEach((test) => test.setState(value));
-        this.suites.forEach((suite) => suite.setState(value));
+        super.setState(value, emit);
     }
 
     addChild(node: Test): void {

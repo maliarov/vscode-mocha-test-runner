@@ -28,7 +28,7 @@ export default class Tests {
     }
 
     reset(): void {
-        this.tree = new Suite('root', 'root', null);
+        this.tree = new Suite(this, 'root', 'root', null);
         this.map = new Map<string, Test>();
         this.map[this.tree.id] = this.tree;
     }
