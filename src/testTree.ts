@@ -18,7 +18,7 @@ export default class MochaTreeDataProvider implements vscode.TreeDataProvider<st
         this.context = context;
         this.tests = tests;
 
-        this.tests.onNodeChanged((offset?: string) => {
+        this.tests.onChanged((offset?: string) => {
             this.changeTreeDataEmmiter.fire(offset);
         });
     }

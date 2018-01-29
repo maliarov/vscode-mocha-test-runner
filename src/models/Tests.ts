@@ -1,31 +1,25 @@
 import * as vscode from 'vscode';
 
+import TestState from './TestState';
+import TestStateMap from './TestStateMap';
 import Test from './Test';
 import Suite from './Suite';
 
+declare type OnNodeHandler = (test: Test) => void;
+
+
 export default class Tests {
-    private nodeChangedEmmiter: vscode.EventEmitter<string | null> = new vscode.EventEmitter<string | null>();
+    private сhangedEmmiter: vscode.EventEmitter<string | null> = new vscode.EventEmitter<string | null>();
 
     private tree: Suite;
     private map: Map<string, Test>;
 
-    readonly onNodeChanged: vscode.Event<string | null> = this.nodeChangedEmmiter.event;
+    readonly onChanged: vscode.Event<string | null> = this.сhangedEmmiter.event;
 
     constructor() {
         this.reset();
     }
 
-
-    buildIndexes(): void {
-        const self: Tests = this;
-        travelOverTree(this.tree);
-        
-        function travelOverTree(suite: Suite) {
-            self.map[suite.id] = suite;
-            suite.tests.forEach((test: Test) => self.map[test.id] = test);
-            suite.suites.forEach((suite: Suite) => travelOverTree(suite));
-        }
-    }
 
     reset(): void {
         this.tree = new Suite(this, 'root', 'root', null);
@@ -33,8 +27,11 @@ export default class Tests {
         this.map[this.tree.id] = this.tree;
     }
 
-    emit(id?: string): void {
-        this.nodeChangedEmmiter.fire(id);
+    parse(data: any): void {
+        this.reset();
+        this.buildTree(data);
+        this.buildIndexes();
+        this.сhangedEmmiter.fire();
     }
 
     getRoot(): Suite {
@@ -45,26 +42,80 @@ export default class Tests {
         return this.map[id];
     }
 
-    // setState(node: Node, state, isCascade: boolean) {
-    //     node = node || this.tree;
+    setState(id: string, state: TestState): void {
+        const test: Test = this.getById(id);
+        if (!test) {
+            return;
+        }
 
-    //     if (this.map[node.id] !== node) {
-    //         return;
-    //     }
+        if (test instanceof Suite) {
+            const suite: Suite = <Suite>test;
 
-    //     node.state = state;
+            suite.tests.forEach((test) => test.state = state);
+            suite.suites.forEach((suite) => suite.state = state);
+        }
 
-    //     if (isCascade && node instanceof Suite) {
-    //         const suiteNode: Suite = <Suite>node;
+        test.state = state;
 
-    //         Array.isArray(suiteNode.tests) && suiteNode.tests.length &&
-    //             suiteNode.tests.forEach((testNode) => this.setState(testNode, state, isCascade));
+        this.сhangedEmmiter.fire(test.id);
+    }
 
-    //         Array.isArray(node.suites) && node.suites.length &&
-    //             node.suites.forEach((suiteNode) => this.setState(suiteNode, state, isCascade));
-    //     }
+    updateState(id: string): void {
+        const root: Test = this.getById(id);
+        if (!(root instanceof Suite)) {
+            return;
+        }
 
-    //     this.nodeChangedEmmiter.fire(node.id);
-    // }
+        const stateMap: TestStateMap = {
+            success: 0,
+            fail: 0,
+            pending: 0
+        };
 
+        this.travelOverTree(root, (test: Test) => {
+            if (test instanceof Suite) {
+                return;
+            }
+            stateMap[test.state.toString()] =  stateMap[test.state.toString()] + 1;
+        });
+
+        if (stateMap.success && !stateMap.fail) {
+             root.state = TestState.success;
+        } else if (stateMap.fail) {
+            root.state = TestState.fail;
+        } else if (stateMap.pending && !stateMap.fail && !stateMap.success) {
+            root.state = TestState.pending;
+        }
+
+        this.сhangedEmmiter.fire(root.id);
+    }
+
+    private buildTree(data: any, parent: Suite = this.getRoot()): void {
+        const testsData: any[] = data.tests || [];
+        const suitesData: any[] = data.suites || [];
+
+        testsData.forEach((testData: any) => {
+            const test: Test = new Test(this, testData.id, testData.title, testData.file);
+            parent.addChild(test);
+        });
+
+        suitesData.forEach((suiteData: any) => {
+            const suite: Suite = new Suite(this, suiteData.id, suiteData.title, suiteData.file);
+            parent.addChild(suite);
+
+            this.buildTree(suiteData, suite);
+        });
+    }
+
+    private buildIndexes(): void {
+        this.travelOverTree(this.tree, (test: Test) => {
+            this.map[test.id] = test
+        });
+    }
+
+    private travelOverTree(suite: Suite, onNode: OnNodeHandler): void {
+        onNode(suite);
+        suite.tests.forEach((test: Test) => onNode(test));
+        suite.suites.forEach((suite: Suite) => this.travelOverTree(suite, onNode));
+    }
 }

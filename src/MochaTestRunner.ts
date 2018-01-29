@@ -66,7 +66,8 @@ export default class MochaTestRunner {
     }
 
     async run(fileName?: string): Promise<void> {
-        this.tests.getRoot().setState(TestState.progress);
+        this.tests.setState('root', TestState.progress);
+
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.starting});
 
         const spawnArgs = [
@@ -105,92 +106,41 @@ export default class MochaTestRunner {
 
     onData(command: Command): Promise<any> {
         switch (command.command) {
-            case 'tests::tree': return this.onTestsTreeCommand(command.payload);
+            case 'tests::tree':
+                return this.onTestsTreeCommand(command.payload);
 
             case 'tests::start':
                 return this.onTestsStartCommand();
 
-            case 'suite::start': {
-                const suite: Suite = <Suite>this.tests.getById(command.payload.id);
-                if (!suite) {
-                    return;
-                }
-                return this.onSuiteStartCommand(suite);
-            }
+            case 'suite::start':
+                return this.onSuiteStartCommand(command.payload.id);
 
-            case 'test::start': {
-                const test: Test = this.tests.getById(command.payload.id);
-                if (!test) {
-                    return;
-                }
-                return this.onTestStartCommand(test);
-            }
+            case 'test::start':
+                return this.onTestStartCommand(command.payload.id);
 
-            case 'test::success': {
-                const test: Test = this.tests.getById(command.payload.id);
-                if (!test) {
-                    return;
-                }
-                return this.onTestSuccessCommand(test);
-            }
+            case 'test::success':
+                return this.onTestSuccessCommand(command.payload.id);
 
-            case 'test::fail': {
-                const test: Test = this.tests.getById(command.payload.id);
-                if (!test) {
-                    return;
-                }
-                return this.onTestFailCommand(test, command.payload);
-            }
+            case 'test::fail':
+                return this.onTestFailCommand(command.payload.id, command.payload);
 
-            case 'test::pending': {
-                const test: Test = this.tests.getById(command.payload.id);
-                if (!test) {
-                    return;
-                }
-                return this.onTestPendingCommand(test);
-            }
+            case 'test::pending':
+                return this.onTestPendingCommand(command.payload.id);
 
-            case 'test::end': {
-                const test: Test = this.tests.getById(command.payload.id);
-                if (!test) {
-                    return;
-                }
-                return this.onTestEndCommand(test);
-            }
+            case 'test::end':
+                return this.onTestEndCommand(command.payload.id);
 
-            case 'suite::end': {
-                const suite: Suite = <Suite>this.tests.getById(command.payload.id);
-                if (!suite) {
-                    return;
-                }
-                return this.onSuiteEndCommand(suite);
-            }
+            case 'suite::end':
+                return this.onSuiteEndCommand(command.payload.id);
 
-            case 'tests::end': return this.onTestsEndCommand();
+            case 'tests::end':
+                return this.onTestsEndCommand();
         }
     }
 
     async onTestsTreeCommand(tree: any): Promise<void> {
-        this.travelOverNodes(tree, this.tests.getRoot());
-
-        this.tests.buildIndexes();
-        this.tests.emit();
+        this.tests.parse(tree);
     }
-    
-    travelOverNodes(node: any, parent: Suite): void {
-        const tests: Test[] = node.tests.forEach((data: any) => {
-            const test: Test = new Test(this.tests, data.id, data.title, data.file);
-            parent.addChild(test);
-        });
-
-        const suites: Suite[] = node.suites.forEach((data: any) => {
-            const suite: Suite = new Suite(this.tests, data.id, data.title, data.file);
-            this.travelOverNodes(data, suite);
-            parent.addChild(suite);
-        });
-    }
-
-
 
     async onTestsStartCommand(): Promise<void> {
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.start});
@@ -200,45 +150,38 @@ export default class MochaTestRunner {
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.stopped});
     }
 
-    async onTestStartCommand(test: Test): Promise<void> {
-        test.setState(TestState.progress);
-        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.startTest, payload: test});
+    async onTestStartCommand(id: string): Promise<void> {
+        this.tests.setState(id, TestState.progress);
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.startTest, payload: this.tests.getById(id)});
     }
 
-    async onTestSuccessCommand(test: Test): Promise<void> {
-        test.setState(TestState.success);
-        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: test});
+    async onTestSuccessCommand(id: string): Promise<void> {
+        this.tests.setState(id, TestState.success);
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: this.tests.getById(id)});
     }
 
-    async onTestFailCommand(test: Test, error: any): Promise<void> {
-        test.setState(TestState.fail);
-        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: test});
+    async onTestFailCommand(id: string, error: any): Promise<void> {
+        this.tests.setState(id, TestState.fail);
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: this.tests.getById(id)});
     }
 
-    async onTestPendingCommand(test: Test): Promise<void> {
-        test.setState(TestState.pending);
-        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: test});
+    async onTestPendingCommand(id: string): Promise<void> {
+        this.tests.setState(id, TestState.pending);
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: this.tests.getById(id)});
     }
 
-    async onTestEndCommand(test: Test): Promise<void> {
-        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: test});
+    async onTestEndCommand(id: string): Promise<void> {
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: this.tests.getById(id)});
     }
 
-    async onSuiteStartCommand(suite: Suite): Promise<void> {
-        suite.setState(TestState.progress);
-        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.startSuite, payload: suite});
+    async onSuiteStartCommand(id: string): Promise<void> {
+        this.tests.setState(id, TestState.progress);
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.startSuite, payload: this.tests.getById(id)});
     }
 
-    async onSuiteEndCommand(suite: Suite): Promise<void> {
-        const stateMap: TestStateMap = suite.getSateMap();
-        if (stateMap.success && !stateMap.fail) {
-            suite.setState(TestState.success);
-        } else if (stateMap.fail) {
-            suite.setState(TestState.fail);
-        } else if (stateMap.pending && !stateMap.fail && !stateMap.success) {
-            suite.setState(TestState.pending);
-        }
-        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishSuite, payload: suite});
+    async onSuiteEndCommand(id: string): Promise<void> {
+        this.tests.updateState(id);
+        await this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishSuite, payload: this.tests.getById(id)});
     }
 
 
