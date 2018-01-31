@@ -104,7 +104,7 @@ function assembleMochaOptionsInfo(): Map<string, MochaOptionInfo> {
     ign({name: ['--napi-modules'], comment: 'enable experimental NAPI modules'});
     ign({name: ['--prof'], comment: 'log statistical profiling information'});
     ign({name: ['--log-timer-events'], comment: 'Time events including external callbacks'});
-    ign({name: ['--recursive'], comment: 'include sub directories'});
+    add({name: ['--recursive'], comment: 'include sub directories'});
     ign({name: ['--reporters'], comment: 'display available reporters'});
     ign({name: ['--retries'], param: '<times>', comment: 'set numbers of time to retry a failed test case'});
     ign({name: ['--throw-deprecation'], comment: 'throw an exception anytime a deprecated function is used'});

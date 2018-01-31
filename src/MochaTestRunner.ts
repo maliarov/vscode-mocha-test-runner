@@ -13,8 +13,8 @@ import Test from './models/Test';
 import Suite from './models/Suite';
 import Tests from './models/Tests';
 
-import * as mocha from './mocha';
-import * as npm from './npm';
+import * as mocha from './utils/mocha';
+import * as npm from './utils/npm';
 
 interface Payload {
     id?: string
@@ -230,11 +230,3 @@ export default class MochaTestRunner {
         return []
     }
 }
-
-/*
-function treeToMap(tree, map = {}) {
-    map[tree.id] = tree;
-    tree.tests && tree.tests.forEach((test) => treeToMap(test, map));
-    tree.suites && tree.suites.forEach((suite) => treeToMap(suite, map));
-    return map;
-}*/

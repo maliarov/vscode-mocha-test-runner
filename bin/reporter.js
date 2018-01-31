@@ -1,6 +1,7 @@
 const path = require('path');
-const mochaModulePath = path.join(process.cwd(), 'node_modules', 'mocha');
+const crypto = require('crypto');
 
+const mochaModulePath = path.join(process.cwd(), 'node_modules', 'mocha');
 const mocha = require(mochaModulePath);
 
 module.exports = Reporter;
@@ -61,7 +62,13 @@ function trevelOverSuites(object, parent) {
 }
 
 function getId(value, parentValue) {
-    return (parentValue ? parentValue + '|' : '') + (value === 'root' ? value : new Buffer(value).toString('base64'));
+    if (value === 'root' && !parentValue) {
+        return value;
+    }
+
+    value = (parentValue ? parentValue + '|' : '') + value;
+
+    return crypto.createHash('md5').update(value).digest('hex');
 }
 
 
@@ -70,6 +77,12 @@ function id(object) {
         return '';
     }
 
+    if (object.title === 'root' && !object.parent) {
+        return object.title;
+    }
+
     const prefix = id(object.parent);
-    return (prefix ? prefix + '|' : '') + (object.title === 'root' ? object.title : new Buffer(object.title).toString('base64'));
+    const value = (prefix ? prefix + '|' : '') + object.title;
+
+    return crypto.createHash('md5').update(value).digest('hex');
 }

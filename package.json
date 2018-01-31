@@ -59,7 +59,13 @@
                 "title": "Stop tests",
                 "category": "Mocha",
                 "icon": "assets/default/icon-stop.png"
+            },
+            {
+                "command": "extension.showTestPreview",
+                "title": "Preview test result",
+                "category": "Mocha"
             }
+
         ],
         "menus": {
 			"view/title": [
@@ -73,7 +79,13 @@
 					"when": "view == testRunner",
 					"group": "navigation"
 				}
-            ]
+            ],
+            "view/item/context": [
+				{
+					"command": "extension.showTestPreview",
+					"when": "view == testRunner"
+				}
+			]
         }
     },
     "scripts": {

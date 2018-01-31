@@ -2,8 +2,8 @@
 
 import * as vscode from 'vscode';
 import MochaTestRunner, {MochaTestRunnerStateData, MochaTestRunnerStates} from './MochaTestRunner';
-import MochaTestTreeDataProvider from './testTree';
-import MochaTestDocumentContentProvider from './testDocument';
+import MochaTestTreeDataProvider from './MochaTreeDataProvider';
+import MochaTestDocumentContentProvider from './MochaTestDocumentContentProvider';
 
 import Test from './models/Test';
 import Tests from './models/Tests';
