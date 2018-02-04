@@ -59,13 +59,17 @@ export default class MochaTestRunner {
 
     stop(): void {
         if (this.childProcess) {
-            this.childProcess.unref();
+            this.childProcess.kill();
             this.childProcess = null;
         }
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.stopped});
     }
 
     async run(fileName?: string): Promise<void> {
+        if (this.childProcess) {
+            return;
+        }
+
         this.tests.setState('root', TestState.progress);
 
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.starting});
@@ -89,17 +93,26 @@ export default class MochaTestRunner {
                 .pipe(es.split('\n'))
                 .pipe(es.parse())
                 .pipe(es.map((command: Command, cb: Function) => {
-                    Promise.resolve(this.onData(command)).then(cb.bind(this, null), (err) => cb(err));
+                    this.onData(command)
+                        .then(() => cb())
+                        .catch((err) => cb(err));
                 }));
 
             this.childProcess.stderr
                 .setEncoding('utf-8')
                 .on('data', (data) => {
                     console.error(data.toString());
-                    //reject(new Error(data.toString()))
                 });
 
-            this.childProcess.on('close', (code) => code ? reject(code) : resolve());
+            this.childProcess.on('close', (code) => {
+                if (!code) {
+                    return resolve();
+                }
+
+                this.tests.setState('root', TestState.terminated);
+                this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.fails});
+                reject();
+            });
         });
     }
 
@@ -143,6 +156,7 @@ export default class MochaTestRunner {
     }
 
     async onTestsStartCommand(): Promise<void> {
+        this.tests.setState('root', TestState.progress);
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.start});
     }
 

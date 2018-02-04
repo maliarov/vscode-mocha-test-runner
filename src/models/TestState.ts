@@ -3,7 +3,8 @@ enum NodeState {
     success = 'success',
     fail = 'fail',
     pending = 'pending',
-    progress = 'progress'
+    progress = 'progress',
+    terminated = 'terminated'
 }
 
 export default NodeState;

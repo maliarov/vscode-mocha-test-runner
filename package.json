@@ -65,27 +65,26 @@
                 "title": "Preview test result",
                 "category": "Mocha"
             }
-
         ],
         "menus": {
-			"view/title": [
-				{
-					"command": "extension.runAllTests",
-					"when": "view == testRunner",
+            "view/title": [
+                {
+                    "command": "extension.runAllTests",
+                    "when": "view == testRunner",
                     "group": "navigation"
-				},
-				{
-					"command": "extension.stopTests",
-					"when": "view == testRunner",
-					"group": "navigation"
-				}
+                },
+                {
+                    "command": "extension.stopTests",
+                    "when": "view == testRunner",
+                    "group": "navigation"
+                }
             ],
             "view/item/context": [
-				{
-					"command": "extension.showTestPreview",
-					"when": "view == testRunner"
-				}
-			]
+                {
+                    "command": "extension.showTestPreview",
+                    "when": "view == testRunner"
+                }
+            ]
         }
     },
     "scripts": {

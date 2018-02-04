@@ -1,6 +1,8 @@
 const path = require('path');
 const crypto = require('crypto');
 
+let id = 0;
+
 const mochaModulePath = path.join(process.cwd(), 'node_modules', 'mocha');
 const mocha = require(mochaModulePath);
 
@@ -20,17 +22,14 @@ function testsTree(runner) {
 
 function testsResult(runner) {
     runner.on('start', () => send('tests::start'));
-    runner.on('suite', (suite) => send('suite::start', {id: id(suite)}));
-    runner.on('test', (test) => send('test::start', {id: id(test)}));
-    runner.on('pass', (test) => send('test::success', {id: id(test)}));
-    runner.on('fail', (test, error) => send('test::fail', {id: id(test), error}));
-    runner.on('pending', (test) => send('test::pending', {id: id(test)}));
-    runner.on('test end', (test) => send('test::end', {id: id(test)}));
-    runner.on('suite end', (suite) => send('suite::end', {id: id(suite)}));
-    runner.on('end', () => {
-        send('tests::end');
-        process.exit(0);
-    });
+    runner.on('suite', (suite) => send('suite::start', {id: suite.id}));
+    runner.on('test', (test) => send('test::start', {id: test.id}));
+    runner.on('pass', (test) => send('test::success', {id: test.id}));
+    runner.on('fail', (test, error) => send('test::fail', {id: test.id, error}));
+    runner.on('pending', (test) => send('test::pending', {id: test.id}));
+    runner.on('test end', (test) => send('test::end', {id: test.id}));
+    runner.on('suite end', (suite) => send('suite::end', {id: suite.id}));
+    runner.on('end', () => send('tests::end'));
 }
 
 function send(command, payload) {
@@ -42,15 +41,21 @@ function buildTree(object) {
 }
 
 function trevelOverSuites(object, parent) {
+    object.id = (id++).toString();
+
     const node = {
-        id: getId(object.title, parent && parent.id),
+        id: object.id,
         type: object.type,
         title: object.title,
         file: object.file
     };
 
+    object.tests.forEach((test) => {
+        test.id = (id++).toString()
+    });
+
     node.tests = object.tests.map((test) => ({
-        id: getId(test.title, node.id),
+        id: test.id,
         type: test.type,
         title: test.title,
         file: test.file
@@ -59,30 +64,4 @@ function trevelOverSuites(object, parent) {
     node.suites = object.suites.map((suite) => trevelOverSuites(suite, node));
 
     return node;
-}
-
-function getId(value, parentValue) {
-    if (value === 'root' && !parentValue) {
-        return value;
-    }
-
-    value = (parentValue ? parentValue + '|' : '') + value;
-
-    return crypto.createHash('md5').update(value).digest('hex');
-}
-
-
-function id(object) {
-    if (!object) {
-        return '';
-    }
-
-    if (object.title === 'root' && !object.parent) {
-        return object.title;
-    }
-
-    const prefix = id(object.parent);
-    const value = (prefix ? prefix + '|' : '') + object.title;
-
-    return crypto.createHash('md5').update(value).digest('hex');
 }

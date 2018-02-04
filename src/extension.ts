@@ -24,13 +24,15 @@ export function activate(context: vscode.ExtensionContext) {
         switch (stateData.state) {
             case MochaTestRunnerStates.starting:
                 return showProgress();
+            case MochaTestRunnerStates.fails:
+                return vscode.window.showInformationMessage('Tests fails', {modal: true});
         }
     });
 
 
     vscode.window.registerTreeDataProvider('testRunner', mochaTestTreeDataProvider);
     vscode.workspace.registerTextDocumentContentProvider('mocha-test-result', mochaTestContentPreviewProvider);
-    
+
 
     context.subscriptions.push(vscode.commands.registerCommand('extension.stopTests', async () => {
         try {
@@ -43,7 +45,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(vscode.commands.registerCommand('extension.runAllTests', async () => {
         try {
-            await mochaTestRunner.run();
+            await mochaTestRunner.run()
         } catch (err) {
             console.error(err);
             throw err;
@@ -76,20 +78,20 @@ export function activate(context: vscode.ExtensionContext) {
 
     async function onProgress(process: vscode.Progress<{message?: string}>): Promise<void> {
         let onChangeStateDisposer: vscode.Disposable;
-    
+
         return new Promise<void>((resolve, reject) => {
             onChangeStateDisposer = mochaTestRunner.onChangeState((stateData: MochaTestRunnerStateData) => {
                 switch (stateData.state) {
                     case MochaTestRunnerStates.starting:
                         return process.report({message: 'preparing tests'});
-    
+
                     case MochaTestRunnerStates.start:
                         return process.report({message: 'starting tests'});
-    
+
                     case MochaTestRunnerStates.startTest:
                         const test: Test = <Test>stateData.payload;
                         return process.report({message: `[test] ${test.title}`});
-    
+
                     case MochaTestRunnerStates.fails:
                     case MochaTestRunnerStates.stopped:
                         resolve();
@@ -97,9 +99,9 @@ export function activate(context: vscode.ExtensionContext) {
                 }
             });
         })
-        .then(onDone)
-        .catch(onDone);
-    
+            .then(onDone)
+            .catch(onDone);
+
         function onDone(): void {
             onChangeStateDisposer.dispose();
         }

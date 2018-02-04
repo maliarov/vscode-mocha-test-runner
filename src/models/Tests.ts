@@ -31,7 +31,7 @@ export default class Tests {
         this.reset();
         this.buildTree(data);
         this.buildIndexes();
-        this.сhangedEmmiter.fire();
+        this.сhangedEmmiter.fire('root');
     }
 
     getRoot(): Suite {
@@ -48,14 +48,14 @@ export default class Tests {
             return;
         }
 
+        test.state = state;
+
         if (test instanceof Suite) {
             const suite: Suite = <Suite>test;
 
             suite.tests.forEach((test) => test.state = state);
-            suite.suites.forEach((suite) => suite.state = state);
+            suite.suites.forEach((suite) => this.setState(suite.id, state));
         }
-
-        test.state = state;
 
         this.сhangedEmmiter.fire(test.id);
     }
