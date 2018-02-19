@@ -2,7 +2,7 @@
     "name": "mocha-test-runner",
     "displayName": "Mocha Test Runner (alpha)",
     "description": "Mocha test runner",
-    "version": "0.0.5",
+    "version": "0.0.6",
     "publisher": "mujichOk",
     "repository": "https://github.com/mujichOk/vscode-mocha-test-runner",
     "engines": {
@@ -12,10 +12,7 @@
         "Other"
     ],
     "activationEvents": [
-        "*",
-        "onCommand:extension.stopTests",
-        "onCommand:extension.runAllTests",
-        "onCommand:extension.runAllTestsInFile"
+        "*"
     ],
     "main": "./out/extension",
     "contributes": {
@@ -96,6 +93,7 @@
         "test": "npm run compile && node ./node_modules/vscode/bin/test"
     },
     "dependencies": {
+        "event-stream": "3.3.3",
         "@types/event-stream": "3.3.33"
     },
     "devDependencies": {
