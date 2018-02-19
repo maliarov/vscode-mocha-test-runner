@@ -1,5 +1,5 @@
 enum NodeState {
-    idle = '',
+    idle = 'idle',
     success = 'success',
     fail = 'fail',
     pending = 'pending',

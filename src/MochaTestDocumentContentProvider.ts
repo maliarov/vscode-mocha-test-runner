@@ -24,12 +24,14 @@ export default class MochaTestDocumentContentProvider implements vscode.TextDocu
 
         switch (test.state) {
             case TestState.fail:
-                const html = test.error.split('\n').join('<br/>');
+                const html = ((test.error && <string>(<any>test.error).message) || '').split('\n').join('<br/>') + '<br/><br/>' + JSON.stringify(test);
                 return `<html><body><pre>${html}</pre></body></html>` || 'no error data';
             case TestState.pending:
                 return 'test skipped';
             case TestState.success:
                 return 'test successed';
+            case TestState.terminated:
+                return 'test terminated';
             case TestState.progress:
                 return 'test is in progress';
             default:

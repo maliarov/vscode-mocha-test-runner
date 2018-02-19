@@ -12,6 +12,7 @@
         "Other"
     ],
     "activationEvents": [
+        "*",
         "onCommand:extension.stopTests",
         "onCommand:extension.runAllTests",
         "onCommand:extension.runAllTestsInFile"
@@ -37,8 +38,8 @@
         "views": {
             "explorer": [
                 {
-                    "id": "testRunner",
-                    "name": "Tests"
+                    "id": "mochaTestRunner",
+                    "name": "Mocha Tests"
                 }
             ]
         },
@@ -70,19 +71,19 @@
             "view/title": [
                 {
                     "command": "extension.runAllTests",
-                    "when": "view == testRunner",
+                    "when": "view == mochaTestRunner",
                     "group": "navigation"
                 },
                 {
                     "command": "extension.stopTests",
-                    "when": "view == testRunner",
+                    "when": "view == mochaTestRunner",
                     "group": "navigation"
                 }
             ],
             "view/item/context": [
                 {
                     "command": "extension.showTestPreview",
-                    "when": "view == testRunner"
+                    "when": "view == mochaTestRunner && viewItem == test"
                 }
             ]
         }

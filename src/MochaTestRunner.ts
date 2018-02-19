@@ -17,7 +17,11 @@ import * as mocha from './utils/mocha';
 import * as npm from './utils/npm';
 
 interface Payload {
-    id?: string
+    id?: string;
+    error?: object;
+
+    dynamic?: boolean;
+    parent?: string;
 }
 
 interface Command {
@@ -70,7 +74,8 @@ export default class MochaTestRunner {
             return;
         }
 
-        this.tests.setState('root', TestState.progress);
+        this.tests.setState('root',  TestState.progress);
+        this.tests.updateRoot();
 
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.starting});
 
@@ -109,8 +114,14 @@ export default class MochaTestRunner {
                     return resolve();
                 }
 
-                this.tests.setState('root', TestState.terminated);
+                this.tests.terminate();
+
                 this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.fails});
+                if (this.childProcess) {
+                    this.childProcess.kill();
+                    this.childProcess = null;
+                }
+        
                 reject();
             });
         });
@@ -126,16 +137,16 @@ export default class MochaTestRunner {
                 return this.onTestsStartCommand();
 
             case 'suite::start':
-                return this.onSuiteStartCommand(command.payload.id);
+                return this.onSuiteStartCommand(command.payload);
 
             case 'test::start':
-                return this.onTestStartCommand(command.payload.id);
+                return this.onTestStartCommand(command.payload);
 
             case 'test::success':
                 return this.onTestSuccessCommand(command.payload.id);
 
             case 'test::fail':
-                return this.onTestFailCommand(command.payload.id, command.payload);
+                return this.onTestFailCommand(command.payload.id, command.payload.error);
 
             case 'test::pending':
                 return this.onTestPendingCommand(command.payload.id);
@@ -153,34 +164,52 @@ export default class MochaTestRunner {
 
     async onTestsTreeCommand(tree: any): Promise<void> {
         this.tests.parse(tree);
+        this.tests.updateState('root');
+        this.tests.updateRoot();
     }
 
     async onTestsStartCommand(): Promise<void> {
         this.tests.setState('root', TestState.progress);
+        this.tests.updateRoot();
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.start});
     }
 
     async onTestsEndCommand(): Promise<void> {
+        this.tests.updateState('root');
+        this.tests.updateRoot();
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.stopped});
     }
 
-    async onTestStartCommand(id: string): Promise<void> {
-        this.tests.setState(id, TestState.progress);
-        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.startTest, payload: this.tests.getById(id)});
+    async onTestStartCommand(payload: Payload): Promise<void> {
+        if (payload.dynamic) {
+            const parent: Test = this.tests.getById(payload.parent);
+            if (!(parent instanceof Suite)) {
+                return;
+            }
+            this.tests.parse(payload, <Suite>parent);
+        }
+
+        this.tests.setState(payload.id, TestState.progress);
+        this.tests.updateRoot();
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.startTest, payload: this.tests.getById(payload.id)});
     }
 
     async onTestSuccessCommand(id: string): Promise<void> {
         this.tests.setState(id, TestState.success);
+        this.tests.updateRoot();
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: this.tests.getById(id)});
     }
 
-    async onTestFailCommand(id: string, error: any): Promise<void> {
+    async onTestFailCommand(id: string, error: object): Promise<void> {
         this.tests.setState(id, TestState.fail);
+        this.tests.getById(id).error = error;
+        this.tests.updateRoot();
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: this.tests.getById(id)});
     }
 
     async onTestPendingCommand(id: string): Promise<void> {
         this.tests.setState(id, TestState.pending);
+        this.tests.updateRoot();
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: this.tests.getById(id)});
     }
 
@@ -188,16 +217,25 @@ export default class MochaTestRunner {
         this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishTest, payload: this.tests.getById(id)});
     }
 
-    async onSuiteStartCommand(id: string): Promise<void> {
-        this.tests.setState(id, TestState.progress);
-        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.startSuite, payload: this.tests.getById(id)});
+    async onSuiteStartCommand(payload: Payload): Promise<void> {
+        if (payload.dynamic) {
+            const parent: Test = this.tests.getById(payload.parent);
+            if (!(parent instanceof Suite)) {
+                return;
+            }
+            this.tests.parse(payload, <Suite>parent);
+        }
+        
+        this.tests.setState(payload.id, TestState.progress);
+        this.tests.updateRoot();
+        this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.startSuite, payload: this.tests.getById(payload.id)});
     }
 
     async onSuiteEndCommand(id: string): Promise<void> {
         this.tests.updateState(id);
+        this.tests.updateRoot();
         await this.onChangeStateEmmiter.fire({state: MochaTestRunnerStates.finishSuite, payload: this.tests.getById(id)});
     }
-
 
     async mochaScriptArguments(): Promise<string[]> {
         const confMochaScriptPath = vscode.workspace.getConfiguration('mocha').get('path', '');

@@ -1,5 +1,6 @@
 export default interface TestStateMap {
-    success: Number;
-    fail: Number;
-    pending: Number
+    success: number;
+    fail: number;
+    pending: number;
+    terminated: number;
 }

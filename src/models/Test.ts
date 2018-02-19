@@ -12,7 +12,7 @@ export default class Test {
 
     title: string;
     file: string;
-    error?: string;
+    error?: object;
 
     constructor(owner: Tests, id: string, title: string, file: string) {
         this.owner = owner;

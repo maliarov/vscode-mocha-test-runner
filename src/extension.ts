@@ -10,9 +10,15 @@ import Tests from './models/Tests';
 
 const progressOptions: vscode.ProgressOptions = {location: vscode.ProgressLocation.Window, title: 'preparing tests'};
 
+const tests: Tests = new Tests();
+
+
+process.on('unhandledRejection', (a, b) => {
+    console.error(a, b);
+})
 
 export function activate(context: vscode.ExtensionContext) {
-    const tests: Tests = new Tests();
+    tests.loadState();
 
     const mochaTestContentPreviewProvider: MochaTestDocumentContentProvider = new MochaTestDocumentContentProvider(context, tests);
     const mochaTestTreeDataProvider: MochaTestTreeDataProvider = new MochaTestTreeDataProvider(context, tests);
@@ -24,14 +30,15 @@ export function activate(context: vscode.ExtensionContext) {
         switch (stateData.state) {
             case MochaTestRunnerStates.starting:
                 return showProgress();
+            case MochaTestRunnerStates.stopped:
             case MochaTestRunnerStates.fails:
-                return vscode.window.showInformationMessage('Tests fails', {modal: true});
+                return tests.storeState();
         }
     });
 
 
-    vscode.window.registerTreeDataProvider('testRunner', mochaTestTreeDataProvider);
-    vscode.workspace.registerTextDocumentContentProvider('mocha-test-result', mochaTestContentPreviewProvider);
+    vscode.window.registerTreeDataProvider('mochaTestRunner', mochaTestTreeDataProvider);
+    vscode.workspace.registerTextDocumentContentProvider('mochaTestResult', mochaTestContentPreviewProvider);
 
 
     context.subscriptions.push(vscode.commands.registerCommand('extension.stopTests', async () => {
@@ -64,8 +71,8 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(vscode.commands.registerCommand('extension.showTestPreview', async (id: string) => {
         try {
-            const url: vscode.Uri = vscode.Uri.parse(`mocha-test-result://view?${id}`);
-            await vscode.commands.executeCommand('vscode.previewHtml', url, vscode.ViewColumn.Two, 'Test Results Preview')
+            const url: vscode.Uri = vscode.Uri.parse(`mochaTestResult://view?${id}`);
+            await vscode.commands.executeCommand('vscode.previewHtml', url, vscode.ViewColumn.Two, 'Mocha Test Results')
         } catch (err) {
             vscode.window.showErrorMessage(err);
         }
@@ -109,5 +116,6 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
+    tests.storeState();
 }
 
